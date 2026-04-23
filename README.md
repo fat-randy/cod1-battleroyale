@@ -1,18 +1,50 @@
-# CoD 1.1 Battle Royale gametype
+# CoD 1.1 Battle Royale Gametype (fat-randys update)
 
-This is just an update for the original Mod from gitth.com/cod1raph.
+This is an update for the original Battle Royale Mod by [cod1raph](https://github.com).
 
-I just added the possibility to store the winners in the stats.db and to decide via convar to see the top kill rounds and winnes in the ingame hud
+## Features
+- **Winner Stats:** Winners can now be stored in the `stats.db`.
+- **In-Game HUD:** New CVars allow you to toggle the display of top kill rounds and overall winners directly in the HUD.
 
-You only need to replace the original server/maps/MP/gametypes/br.gsc with the attached on.
+## Installation
 
-And add the following cvas into you main/bar.cfg
+1. **Replace GSC File:**  
+   Replace the original file at `server/maps/MP/gametypes/br.gsc` with the version provided in this fork.
 
-// [bool] Show Top 3 Killrounds in HUD
-set br_show_topkills "1"
+2. **Update Configuration:**  
+   Add the following CVars to your `main/br.cfg` (or use the `br.cfg` from this fork):
 
-// [bool] Show Winners Top 3 in HUD
-set br_show_winners "1"
+   ```cfg
+   // [bool] Show Top 3 Killrounds in HUD
+   set br_show_topkills "1"
 
-Have fun
-Screenshot will follow!
+   // [bool] Show Winners Top 3 in HUD
+   set br_show_winners "1"
+   ```
+
+## Database Setup (SQLite)
+
+It may be necessary to manually update your `stats.db`. You need to add the `match_winners` table using the following command:
+
+**Table structure:**
+- `name` (TEXT)
+- `wins` (INTEGER)
+- `total_kills` (INTEGER)
+- `lastseen` (INTEGER)
+
+**SQL Command:**
+```sql
+CREATE TABLE match_winners (
+    name TEXT PRIMARY KEY, 
+    wins INTEGER, 
+    total_kills INTEGER, 
+    lastseen INTEGER
+);
+```
+
+---
+*Screenshot:*
+<img width="1702" height="955" alt="Screenshot 2026-04-23 131519" src="https://github.com/user-attachments/assets/7634da63-839f-4fd1-be04-7b1ce506791d" />
+
+
+
