@@ -42,6 +42,10 @@ CREATE TABLE match_winners (
 );
 ```
 
+## Statsviewer:
+
+If you are hosting the Gameserver on same machine with a webserver you can use https://github.com/fat-randy/cod1-battleroyale-php-stats-viewer to view your stats!
+
 ---
 *Screenshot:*
 <img width="1702" height="955" alt="Screenshot 2026-04-23 131519" src="https://github.com/user-attachments/assets/7634da63-839f-4fd1-be04-7b1ce506791d" />
