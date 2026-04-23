@@ -1,54 +1,18 @@
 # CoD 1.1 Battle Royale gametype
 
-Some features are:
-- Shrinking zone
-- Skydiving
-- Weapon crates
-- Last kill slow motion
+This is just an update for the original Mod from gitth.com/cod1raph.
 
----
----
+I just added the possibility to store the winners in the stats.db and to decide via convar to see the top kill rounds and winnes in the ingame hud
 
-## Setup notes
+You only need to replace the original server/maps/MP/gametypes/br.gsc with the attached on.
 
-Your server needs to run [iw1x-server](https://github.com/cod1raph/iw1x-server-r), see [this tutorial](https://github.com/cod1raph/cod1-tutorials/blob/main/Setup%20iw1x-server.md).  
-Ensure to use the latest release when updating the gametype from this repo.
+And add the following cvas into you main/bar.cfg
 
-You will have to create 5 pk3 files:
-- One containing the content of `client/other`
-- One containing the content of `client/weapons`
-- One containing the content of `client/zone`
-- One containing the content of `server`, except `br.cfg`
-- One containing the content of `common/map` , except `source`
+// [bool] Show Top 3 Killrounds in HUD
+set br_show_topkills "1"
 
-See this tutorial about managing pk3 files: [Manage pk3 files](https://github.com/cod1raph/cod1-tutorials/blob/main/Manage%20pk3%20files.md).
+// [bool] Show Winners Top 3 in HUD
+set br_show_winners "1"
 
-`br.cfg` should be put in your main folder, and you should add `exec br.cfg` in your usual cfg file.
-
-All the pk3 files should be downloaded by the client, except the server pk3.  
-The server pk3 should have priority over the pk3 made using files fom `client/other`, because they both contain a `br.gsc` file.
-
-Use `fs_game` and put all the pk3 in the directory to avoid conflicts with other servers that would use the same gametype.
-
-g_gametype: `br`  
-mapname: `zh_elusive`
-
----
----
----
-
-### References & Credits
-- [MiscMod](https://github.com/cato-a/CoDaM_MiscMod)
-- [Killtube](https://killtube.org)
-- [iBuddie's script documentation](https://www.ibuddie.at/libcod)
-- [zh_Elusive](https://vcodmods.com/maps/zh-elusive-battle-royal-template)
-- [CoD1 Radiant Tutorials by TheGoog](https://www.youtube.com/playlist?list=PLb5ihZo7ved010imAmoZxa5C5946Oi-9z)
-- [CoDRadiant Beginner Tutorials by zilch](https://www.youtube.com/@hcliz/videos) (Oct 24, 2024)
-- [TheGoog-CoD1-map-collection](https://github.com/thegoog1337/TheGoog-CoD1-map-collection)
-- https://github.com/BraXi/CoD1_Zombies_1.2_Mod/tree/master/client
-- https://gitlab.com/kazam0180/cod1-battleroyale/-/blob/main/client/weapons/mp/br_parachute_mp
-- https://github.com/eyza-cod2/zpam3/blob/master/source/images/compassface.iwi
-- https://www.flaticon.com/free-icon/soldier_6142078
-- https://freesound.org/people/arnicholas12/sounds/702765/
-- https://freesound.org/people/newlocknew/sounds/732379/
-- https://freesound.org/people/2create/sounds/620310/
+Have fun
+Screenshot will follow!
