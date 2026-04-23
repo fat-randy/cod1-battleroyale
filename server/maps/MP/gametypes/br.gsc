@@ -543,12 +543,46 @@ initDB()
     query_create = "CREATE TABLE IF NOT EXISTS player_best_kills (name TEXT PRIMARY KEY, best_kills INTEGER, last_update INTEGER);";
 	sqlite_query(level.statsDB, query_create);
 
+//NEW - Start: fat-randy
+
+    // fat-randy: table for sum of wins and kills
+    // name TEXT PRIMARY KEY asures, that each player exist only one time
+    sqlite_query(level.statsDB, "CREATE TABLE IF NOT EXISTS match_winners (name TEXT PRIMARY KEY, wins INTEGER, total_kills INTEGER, lastseen INTEGER);");
+//NEW - End: fat-randy
+
 	async_sqlite_initialize();
 	thread async_sqlite_checkdone_loop(); // For the callback functions of async queries to get called
 
     // Init top kills HUD
     topKillsRetrieve();
+	
+//NEW - Start: fat-randy	
+    // Init Winners HUD
+	winnersRetrieve();
+//NEW - End: fat-randy
 }
+
+//NEW - Start: fat-randy
+saveWinnerToDB(winnerName, currentMatchKills)
+{
+    if(!isDefined(level.statsDB))
+        return;
+
+    safeName = sqlite_escape_string(winnerName);
+    
+    // UPSERT logic: Insert or update if Name exists
+    query_upsert = 
+    "INSERT INTO match_winners (name, wins, total_kills, lastseen) " +
+    "VALUES ('" + safeName + "', 1, " + currentMatchKills + ", strftime('%s', 'now')) " +
+    "ON CONFLICT(name) DO UPDATE SET " +
+    "wins = wins + 1, " +
+    "total_kills = total_kills + " + currentMatchKills + ", " +
+    "lastseen = strftime('%s', 'now');";
+    
+    // Executes the query asyncually and then updates the HUD display if necessary.
+    async_sqlite_create_query(level.statsDB, query_upsert, ::topKillsQueryCallback, "update");
+}
+//NEW - End: fat-randy
 
 async_sqlite_checkdone_loop()
 {
@@ -610,35 +644,72 @@ topKillsRetrieve()
 
 topKillsQueryCallback(rows, arg)
 {
+    // Use getcvar for CoD1 v1.1 compatibility
+    // Make sure 'set br_show_topkills 1' is in your br.cfg
+    if (getcvar("br_show_topkills") != "1")
+    {
+        if (isDefined(level.hud_statsTopPlayers))
+            level.hud_statsTopPlayers.alpha = 0;
+            
+        return;
+    }
+
     if (arg == "update")
     {
         topKillsRetrieve();
     }
     else if (arg == "retrieve")
     {
-        // TODO: If multiple players have same kill record, group them together
+        // Group players with the same kill record together
         if (rows.size)
-		{
-            hudText = "Kill records: ";
+        {
+            // Updated header with Top 3 title and newline for vertical layout
+            hudText = "Kill records - Top 3:\n";
+            displayedGroups = 0;
 
             for (i = 0; i < rows.size; i++)
             {
                 name = rows[i][0];
                 kills = rows[i][1];
                 
-                hudText += "^2" + kills + " ^7(" + name + "^7)";
+                // Check if multiple players have same kill record, group them together
+                if (i > 0 && rows[i-1][1] == kills)
+                {
+                    // Same kill count: Append the name to the current group
+                    hudText += ", " + name;
+                }
+                else
+                {
+                    // Stop if we have already displayed 3 groups
+                    if (displayedGroups >= 3)
+                        break;
 
-                if(i < rows.size - 1)
-                    hudText += " || ";
+                    // Different kill count: Add newline (if not first) and start new group
+                    if (i > 0)
+                        hudText += "\n";
+                        
+                    hudText += "^2" + kills + " ^7(" + name;
+                    displayedGroups++;
+                }
+
+                // Close the parenthesis if it's the last entry or the next entry has different kills
+                if (i == rows.size - 1 || rows[i+1][1] != kills)
+                {
+                    hudText += "^7)";
+                }
             }
             
+            // Initialize HUD element if it doesn't exist
             if (!isDefined(level.hud_statsTopPlayers))
             {
                 level.hud_statsTopPlayers = newHudElem();
                 level.hud_statsTopPlayers.x = 2;
-                level.hud_statsTopPlayers.y = 1;
+                level.hud_statsTopPlayers.y = 10;
                 level.hud_statsTopPlayers.fontScale = 0.9;
             }
+
+            // Update the HUD display
+            level.hud_statsTopPlayers.alpha = 1;
             hudText_localized = makeLocalizedString(hudText);
             level.hud_statsTopPlayers setText(hudText_localized);
         }
@@ -660,7 +731,88 @@ updateTopKillsTable(score, name)
     +" WHERE excluded.best_kills > best_kills;";
     async_sqlite_create_query(level.statsDB, query_insert, ::topKillsQueryCallback, "update");
 }
-////
+
+//NEW - Start: fat-randy
+winnersRetrieve()
+{
+    // Using the same database handle (level.statsDB) and syntax as topKills
+    query_select = "SELECT name, wins FROM match_winners ORDER BY wins DESC LIMIT 15;";
+    async_sqlite_create_query(level.statsDB, query_select, ::winnersQueryCallback, "retrieve");
+}
+
+winnersQueryCallback(rows, arg)
+{
+    // Use getcvar for CoD1 v1.1 compatibility
+    if (getcvar("br_show_winners") != "1")
+    {
+        if (isDefined(level.hud_statsWinners))
+            level.hud_statsWinners.alpha = 0;
+            
+        return;
+    }
+
+    if (arg == "update")
+    {
+        winnersRetrieve();
+    }
+    else if (arg == "retrieve")
+    {
+        // Check if rows is defined and has data
+        if (isDefined(rows) && rows.size > 0)
+        {
+            // Header for winners display
+            hudText = "Winners - Top 3:\n";
+            displayedGroups = 0;
+
+            for (i = 0; i < rows.size; i++)
+            {
+                name = rows[i][0];
+                wins = rows[i][1];
+                
+                // Grouping logic for same win counts
+                if (i > 0 && rows[i-1][1] == wins)
+                {
+                    hudText += ", " + name;
+                }
+                else
+                {
+                    // Stop after 3 different score ranks
+                    if (displayedGroups >= 3)
+                        break;
+
+                    if (i > 0)
+                        hudText += "\n";
+                        
+                    hudText += "^3" + wins + " ^7(" + name;
+                    displayedGroups++;
+                }
+
+                // Close the bracket for the group
+                if (i == rows.size - 1 || rows[i+1][1] != wins)
+                {
+                    hudText += "^7)";
+                }
+            }
+            
+            // Setup HUD element
+            if (!isDefined(level.hud_statsWinners))
+            {
+                level.hud_statsWinners = newHudElem();
+                level.hud_statsWinners.x = 2;
+                level.hud_statsWinners.y = 65; // Positioned below Kill Records
+                level.hud_statsWinners.fontScale = 0.9;
+                level.hud_statsWinners.alignX = "left";
+                level.hud_statsWinners.alignY = "top";
+            }
+
+            level.hud_statsWinners.alpha = 1;
+            hudText_localized = makeLocalizedString(hudText);
+            level.hud_statsWinners setText(hudText_localized);
+        }
+    }
+}
+//NEW - End: fat-randy
+
 
 //// Spawn
 spawnSpectator(origin, angles, died)
@@ -1978,9 +2130,11 @@ checkVictoryRoyale(playerEntity)
         
         if (alivePlayers.size == 1)
         {
-            level.battleOver = true;
-
+            level.battleOver = true;			
             winner = alivePlayers[0];
+//NEW - Start: fat-randy
+            saveWinnerToDB(winner.name, winner.score);
+//NEW - End: fat-randy			
             winner.hud_victoryRoyale = newClientHudElem(winner);
             winner.hud_victoryRoyale.archived = false;
             winner.hud_victoryRoyale.alignX = "center";
