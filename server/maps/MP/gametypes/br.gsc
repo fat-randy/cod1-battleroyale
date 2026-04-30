@@ -452,35 +452,52 @@ Callback_PlayerDamage(eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sW
     // Apply the damage to the player
     self finishPlayerDamage(eInflictor, eAttacker, iDamage, iDFlags, sMeansOfDeath, sWeapon, vPoint, vDir, sHitLoc);
 }
+
 Callback_PlayerKilled(eInflictor, eAttacker, iDamage, sMeansOfDeath, sWeapon, vDir, sHitLoc)
 {
     self endon("spawned");
+
+    // New - fat-randy: Capture name immediately to ensure it's available for DB logging
+    victimName = self.name;
 
     if(self.sessionteam == "spectator")
         return;
 
     if(sHitLoc == "head" && sMeansOfDeath != "MOD_MELEE")
         sMeansOfDeath = "MOD_HEAD_SHOT";
+
     obituary(self, eAttacker, sWeapon, sMeansOfDeath);
     
     self notify("death");
 
     self.sessionstate = "dead";
 
-    if (eAttacker == level.zone || eAttacker == level.zoneStatic)
+    // New - fat-randy: Real-time stats logging using local variable for victim
+    if(isDefined(victimName))
     {
-        //printLnBR("Callback_PlayerKilled: eAttacker is zone");
+        // Victim gets +1 death
+        thread updatePlayerStats(victimName, "death");
+    }
+
+    if (isPlayer(eAttacker) && eAttacker != self)
+    {
+        // Attacker gets +1 kill
+        thread updatePlayerStats(eAttacker.name, "kill");
+    }
+    // New - fat-randy: End of real-time logging
+
+    // New - fat-randy: Trigger victory royale check
+    if (eAttacker == level.zone || eAttacker == level.zoneStatic || sMeansOfDeath == "MOD_FALLING")
+    {
+        // Environmental death
         level thread checkVictoryRoyale(self);
     }
-    else if (sMeansOfDeath == "MOD_FALLING")
+    else if (isPlayer(eAttacker))
     {
-        //printLnBR("Callback_PlayerKilled: MOD_FALLING");
-        level thread checkVictoryRoyale(self);
-    }
-    else
-    {
+        // Killed by player
         level thread checkVictoryRoyale(eAttacker);
     }
+    // New - fat-randy: End of victory trigger
 
     self.statusicon = "gfx/hud/hud@status_dead.tga";
     self.deaths = 1;
@@ -497,9 +514,11 @@ Callback_PlayerKilled(eInflictor, eAttacker, iDamage, sMeansOfDeath, sWeapon, vD
             }
             eAttacker.score++;
 
+            // Original code for leaderboard
             thread updateTopKillsTable(eAttacker.score, eAttacker.name);
         }
     }
+
     body = self cloneplayer();
 
     timeToWaitAfterDeath = 2; // Delay the player becoming a spectator
@@ -517,7 +536,7 @@ Callback_PlayerKilled(eInflictor, eAttacker, iDamage, sMeansOfDeath, sWeapon, vD
         self thread spawnSpectator(currentorigin + (0, 0, 60), currentangles, true);
     }
 }
-////
+
 
 //// Stats
 initDB()
@@ -545,9 +564,10 @@ initDB()
 
 //NEW - Start: fat-randy
 
-    // fat-randy: table for sum of wins and kills
+    // fat-randy: table for sum of wins, kills and deaths
     // name TEXT PRIMARY KEY asures, that each player exist only one time
-    sqlite_query(level.statsDB, "CREATE TABLE IF NOT EXISTS match_winners (name TEXT PRIMARY KEY, wins INTEGER, total_kills INTEGER, lastseen INTEGER);");
+	query = "CREATE TABLE IF NOT EXISTS match_winners (name TEXT PRIMARY KEY, wins INTEGER, total_kills INTEGER, total_deaths INTEGER, lastseen INTEGER);";
+    sqlite_query(level.statsDB, query);
 //NEW - End: fat-randy
 
 	async_sqlite_initialize();
@@ -562,20 +582,24 @@ initDB()
 //NEW - End: fat-randy
 }
 
-//NEW - Start: fat-randy
+
+
+// New - fat-randy: Function to save winner stats using SQLite Upsert
 saveWinnerToDB(winnerName, currentMatchKills)
 {
-    // 1. Basic safety checks
     if(!isDefined(level.statsDB) || !isDefined(winnerName))
         return;
 
-    // 2. Ensure currentMatchKills is a valid number
+    // Safety: Ensure we have a valid number
     if(!isDefined(currentMatchKills))
         currentMatchKills = 0;
 
+    // Convert to number by adding zero
+    currentMatchKills = currentMatchKills + 0;
+
     safeName = sqlite_escape_string(winnerName);
     
-    // UPSERT logic: Insert or update if Name exists
+    // SQLite UPSERT logic: No quotes around currentMatchKills for mathematical addition
     query_upsert = 
     "INSERT INTO match_winners (name, wins, total_kills, lastseen) " +
     "VALUES ('" + safeName + "', 1, " + currentMatchKills + ", strftime('%s', 'now')) " +
@@ -584,9 +608,43 @@ saveWinnerToDB(winnerName, currentMatchKills)
     "total_kills = total_kills + " + currentMatchKills + ", " +
     "lastseen = strftime('%s', 'now');";
     
-    async_sqlite_create_query(level.statsDB, query_upsert, ::topKillsQueryCallback, "update");
+    async_sqlite_create_query(level.statsDB, query_upsert, ::winnersQueryCallback, "update");
 }
-//NEW - End: fat-randy
+// New - fat-randy: End of function
+
+
+
+// New - fat-randy: universal stats function
+updatePlayerStats(playerName, type, optionalKills)
+{
+    if(!isDefined(level.statsDB) || !isDefined(playerName))
+        return;
+
+    // Small delay for deaths to prevent write-collisions in SQLite
+    if(type == "death")
+        wait 0.1;
+
+    safeName = sqlite_escape_string(playerName);
+    
+    win = 0; 
+    kill = 0; 
+    death = 0;
+
+    if(type == "win")   win = 1;
+    if(type == "kill")  kill = 1;
+    if(type == "death") death = 1;
+
+    query = "INSERT INTO match_winners (name, wins, total_kills, total_deaths, lastseen) " +
+            "VALUES ('" + safeName + "', " + win + ", " + kill + ", " + death + ", strftime('%s', 'now')) " +
+            "ON CONFLICT(name) DO UPDATE SET " +
+            "wins = wins + " + win + ", " +
+            "total_kills = total_kills + " + kill + ", " +
+            "total_deaths = total_deaths + " + death + ", " +
+            "lastseen = strftime('%s', 'now');";
+
+    sqlite_query(level.statsDB, query);
+}// New - fat-randy: End of function
+
 
 async_sqlite_checkdone_loop()
 {
@@ -668,7 +726,7 @@ topKillsQueryCallback(rows, arg)
         if (rows.size)
         {
             // Updated header with Top 3 title and newline for vertical layout
-            hudText = "Kill records - Top 3:\n";
+            hudText = "Kill records - TOP 3:\n";
             displayedGroups = 0;
 
             for (i = 0; i < rows.size; i++)
@@ -692,14 +750,14 @@ topKillsQueryCallback(rows, arg)
                     if (i > 0)
                         hudText += "\n";
                         
-                    hudText += "^2" + kills + " ^7(" + name;
+                    hudText += "^2" + kills + " ^7- " + name;
                     displayedGroups++;
                 }
 
                 // Close the parenthesis if it's the last entry or the next entry has different kills
                 if (i == rows.size - 1 || rows[i+1][1] != kills)
                 {
-                    hudText += "^7)";
+                    hudText += "^7";
                 }
             }
             
@@ -709,7 +767,7 @@ topKillsQueryCallback(rows, arg)
                 level.hud_statsTopPlayers = newHudElem();
                 level.hud_statsTopPlayers.x = 2;
                 level.hud_statsTopPlayers.y = 10;
-                level.hud_statsTopPlayers.fontScale = 0.9;
+                level.hud_statsTopPlayers.fontScale = 0.8;
             }
 
             // Update the HUD display
@@ -736,26 +794,22 @@ updateTopKillsTable(score, name)
     async_sqlite_create_query(level.statsDB, query_insert, ::topKillsQueryCallback, "update");
 }
 
-//NEW - Start: fat-randy
-
 // 1. Function to trigger the database retrieval
 winnersRetrieve()
 {
-    // Safety check for the database handle
     if(!isDefined(level.statsDB))
         return;
 
-    // Fetch name, wins, and total_kills. Sorted by wins, then kills as tie-breaker.
-    query_select = "SELECT name, wins, total_kills FROM match_winners ORDER BY wins DESC, total_kills DESC LIMIT 20;";
+    // Fetch all three: wins, kills, and deaths
+    // Sorting: Most wins first, then most kills, then fewest deaths
+    query_select = "SELECT name, wins, total_kills, total_deaths FROM match_winners ORDER BY wins DESC, total_kills DESC, total_deaths ASC LIMIT 20;";
     
-    // Execute the query asynchronously
     async_sqlite_create_query(level.statsDB, query_select, ::winnersQueryCallback, "retrieve");
 }
 
 // 2. Callback function to handle the database results and HUD display
 winnersQueryCallback(rows, arg)
 {
-    // Check if the HUD display is enabled via console variable
     if (getcvar("br_show_winners") != "1")
     {
         if (isDefined(level.hud_statsWinners))
@@ -763,17 +817,14 @@ winnersQueryCallback(rows, arg)
         return;
     }
 
-    // If an update was triggered, re-run the retrieval
     if (arg == "update")
     {
         winnersRetrieve();
         return;
     }
     
-    // Process the "retrieve" response from SQLite
     if (arg == "retrieve")
     {
-        // Safety check: ensure 'rows' is defined and has elements
         if (!isDefined(rows) || rows.size <= 0)
         {
             if (isDefined(level.hud_statsWinners))
@@ -781,41 +832,46 @@ winnersQueryCallback(rows, arg)
             return;
         }
 
-        hudText = "TOP 3 PLAYERS (^3Wins^7/^2Kills):\n";
+        hudText = "Winner - TOP 3 (^3W^7/^2K^7/^1D^7):\n";
         displayedGroups = 0;
 
-        // Loop through the database rows
         for (i = 0; i < rows.size; i++)
         {
-            // Limit to Top 3 ranking groups
             if (displayedGroups >= 3) 
                 break;
 
-            // Extract row data
             row = rows[i];
             if (!isDefined(row))
                 continue;
 
-            name = row[0];
-            wins = row[1];
+            name   = row[0];
+            wins   = row[1];
             
-            // Handle kills (default to 0 if column/data is missing)
+            // Klassische IF-Abfragen statt des '?' Operators
             kills = 0;
-            if (isDefined(row[2]))
+            if(isDefined(row[2]))
                 kills = row[2];
+
+            deaths = 0;
+            if(isDefined(row[3]))
+                deaths = row[3];
             
             othersCount = 0;
 
-            // Logic to find players with identical Wins and Kills
             for (j = i + 1; j < rows.size; j++)
             {
                 nextRow = rows[j];
                 if (isDefined(nextRow) && isDefined(nextRow[1]) && nextRow[1] == wins)
                 {
                     nextKills = 0;
-                    if(isDefined(nextRow[2])) nextKills = nextRow[2];
+                    if(isDefined(nextRow[2])) 
+                        nextKills = nextRow[2];
 
-                    if(nextKills == kills)
+                    nextDeaths = 0;
+                    if(isDefined(nextRow[3])) 
+                        nextDeaths = nextRow[3];
+
+                    if(nextKills == kills && nextDeaths == deaths)
                         othersCount++;
                     else
                         break;
@@ -824,31 +880,26 @@ winnersQueryCallback(rows, arg)
                     break;
             }
 
-            // Add line break between different ranks
             if (displayedGroups > 0)
                 hudText += "\n";
 
-            // Build the line: ^3=Gold(Wins), ^2=Green(Kills), ^7=White(Name)
-            hudLine = "^3" + wins + " ^7/^2" + kills + "^7 - " + name;
+            hudLine = "^3" + wins + "^7/^2" + kills + "^7/^1" + deaths + " ^7- " + name;
 
-            // If there are ties, show the "+ X" count
             if (othersCount > 0)
-                hudLine += " + " + othersCount;
+                hudLine += " ^3+" + othersCount;
 
             hudText += hudLine;
             displayedGroups++;
             
-            // Skip the players that were just grouped
             i = i + othersCount;
         }
 
-        // Handle the HUD element creation/update
         if (!isDefined(level.hud_statsWinners))
         {
             level.hud_statsWinners = newHudElem();
-            level.hud_statsWinners.x = 5;
+            level.hud_statsWinners.x = 2;
             level.hud_statsWinners.y = 70;
-            level.hud_statsWinners.fontScale = 0.85;
+            level.hud_statsWinners.fontScale = 0.80;
             level.hud_statsWinners.alignX = "left";
             level.hud_statsWinners.alignY = "top";
             level.hud_statsWinners.horzAlign = "left";
@@ -857,14 +908,10 @@ winnersQueryCallback(rows, arg)
 
         level.hud_statsWinners.alpha = 1;
         
-        // CRITICAL FIX: Convert the dynamic string to an 'istring' for CoD1 HUD
-        // This solves the "cannot cast string to istring" crash
         localizedHudText = makeLocalizedString(hudText);
         level.hud_statsWinners setText(localizedHudText);
     }
 }
-//NEW - End: fat-randy
-
 
 //// Spawn
 spawnSpectator(origin, angles, died)
@@ -2148,7 +2195,9 @@ updateNumLivingPlayers()
     }
 }
 
-checkVictoryRoyale(playerEntity)
+
+// New - fat-randy: Updated victory check (preserved killsAtDeath for compatibility)
+checkVictoryRoyale(playerEntity, killsAtDeath)
 {
     if (!level.battleStarted || level.battleOver)
         return;
@@ -2169,7 +2218,7 @@ checkVictoryRoyale(playerEntity)
             break;
     }
     
-    if (alivePlayers.size == 1 || alivePlayers.size == 0)
+    if (alivePlayers.size <= 1)
     {
         hud_battleIsOver = newHudElem();
         hud_battleIsOver.alignX = "center";
@@ -2182,19 +2231,16 @@ checkVictoryRoyale(playerEntity)
         
         if (alivePlayers.size == 1)
         {
-            level.battleOver = true;			
+            level.battleOver = true;            
             winner = alivePlayers[0];
-//NEW: fat-randy
-			if(isDefined(winner) && isDefined(winner.name))
-			{
-				// Make sure pers and kills exist before accessing them
-				kills = 0;
-				if(isDefined(winner.pers) && isDefined(winner.pers["kills"]))
-					kills = winner.pers["kills"];
 
-				saveWinnerToDB(winner.name, kills);
-			}
-			
+            if(isDefined(winner) && isDefined(winner.name))
+            {
+                // New - fat-randy: Record only the win (kills/deaths are live)
+                //iprintln("^1DB-INFO: ^7Match Victory saved for " + winner.name);
+                updatePlayerStats(winner.name, "win");
+            }
+            
             winner.hud_victoryRoyale = newClientHudElem(winner);
             winner.hud_victoryRoyale.archived = false;
             winner.hud_victoryRoyale.alignX = "center";
@@ -2220,11 +2266,8 @@ checkVictoryRoyale(playerEntity)
             {
                 wait_during_slowmotion = 0.065 / timescale;
                 wait wait_during_slowmotion;
-
                 waited += wait_during_slowmotion;
-                //printLnBR("setCvar timescale: " + timescale);
                 setCvar("timescale", timescale);
-                //printLnBR("wait_during_slowmotion: " + wait_during_slowmotion);
             }
             setCvar("timescale", 1);
 
@@ -2242,7 +2285,7 @@ checkVictoryRoyale(playerEntity)
             hud_victoryRoyale.alignY = "middle";
             hud_victoryRoyale.x = 320;
             hud_victoryRoyale.y = 100;
-            hud_victoryRoyale.color = level.color_red;
+            hud_victoryRoyale.color = (1, 0, 0); 
             hud_victoryRoyale.fontScale = 1.5;
             hud_victoryRoyale.font = "bigfixed";
             hud_victoryRoyale setText(&"NO ONE SURVIVED");
