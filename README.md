@@ -30,6 +30,7 @@ It may be necessary to manually update your `stats.db`. You need to add the `mat
 - `name` (TEXT)
 - `wins` (INTEGER)
 - `total_kills` (INTEGER)
+- `total_deaths` (INTEGER)
 - `lastseen` (INTEGER)
 
 **SQL Command:**
@@ -37,7 +38,8 @@ It may be necessary to manually update your `stats.db`. You need to add the `mat
 CREATE TABLE match_winners (
     name TEXT PRIMARY KEY, 
     wins INTEGER, 
-    total_kills INTEGER, 
+    total_kills INTEGER,
+    total_deaths INTEGER, 
     lastseen INTEGER
 );
 ```
