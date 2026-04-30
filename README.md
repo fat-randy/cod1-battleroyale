@@ -50,7 +50,8 @@ If you are hosting the Gameserver on same machine with a webserver you can use h
 
 ---
 *Screenshot:*
-<img width="1702" height="955" alt="Screenshot 2026-04-23 131519" src="https://github.com/user-attachments/assets/7634da63-839f-4fd1-be04-7b1ce506791d" />
+<img width="1707" height="955" alt="Screenshot 2026-04-30 145357" src="https://github.com/user-attachments/assets/8410637a-525b-4119-9244-2e3d81b0e2bd" />
+
 
 
 
