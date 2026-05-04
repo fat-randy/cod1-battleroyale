@@ -766,7 +766,7 @@ topKillsQueryCallback(rows, arg)
             {
                 level.hud_statsTopPlayers = newHudElem();
                 level.hud_statsTopPlayers.x = 2;
-                level.hud_statsTopPlayers.y = 10;
+                level.hud_statsTopPlayers.y = 3;
                 level.hud_statsTopPlayers.fontScale = 0.8;
             }
 
@@ -898,7 +898,7 @@ winnersQueryCallback(rows, arg)
         {
             level.hud_statsWinners = newHudElem();
             level.hud_statsWinners.x = 2;
-            level.hud_statsWinners.y = 70;
+            level.hud_statsWinners.y = 130;
             level.hud_statsWinners.fontScale = 0.80;
             level.hud_statsWinners.alignX = "left";
             level.hud_statsWinners.alignY = "top";
